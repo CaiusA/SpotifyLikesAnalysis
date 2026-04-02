@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-#pd.set_option('display.max_rows', None)
+# pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 130)
 
@@ -9,6 +9,7 @@ df = pd.read_csv('spotify_liked_tracks.csv')
 
 df['Song Added At'] = pd.to_datetime(df['Song Added At'], format='ISO8601').dt.tz_convert('America/Chicago')
 
+# fig1 data
 dates = df['Song Added At'].sort_values()
 
 monthlyActivity = dates.dt.strftime('%b %Y')
@@ -28,11 +29,30 @@ hours = hours.reindex(hour_order, axis=0).reset_index().fillna(0)
 rating = df['Explicit'].value_counts().reset_index()
 rating['Explicit'] = rating['Explicit'].replace({False: 'Not Explicit', True: 'Explicit'})
 
+# fig2 data
+unique = df[['Artist', 'Album']].nunique().reset_index(name='count')
+album = df['Album Type'].value_counts().reset_index()
+album['Album Type'] = album['Album Type'].str.capitalize()
+
+diff = df[['Song Added At', 'Release Date']].copy()
+
+# convert YYYY to YYYY-MM-DD 
+diff['Release Date'] = diff['Release Date'].apply(lambda x: x + '-01-01' if len(x) == 4 else x)
+diff['Release Date'] = pd.to_datetime(diff['Release Date'])
+diff['Song Added At'] = diff['Song Added At'].dt.tz_localize(None).dt.normalize()
+diff['Difference'] = diff['Song Added At'] - diff['Release Date']
+
+bins = [0, 15, 30, 180, 365, 1825, float('inf')]
+labels = ['15 days', '1 month', '6 months', '1 year', '5 years', 'Over 5 years']
+diff['Recency'] = pd.cut(diff['Difference'].dt.days, bins=bins, labels=labels, right=False)
+
+freq = diff['Recency'].value_counts(sort=False).reset_index()
+
 # plot data
-fig, axd = plt.subplot_mosaic(
+fig1, axd = plt.subplot_mosaic(
     [['Only Month', 'Hourly', 'Explicit'],
      ['Monthly', 'Monthly', 'Explicit']],
-    layout='constrained', figsize=(20, 6))
+    layout='constrained', figsize=(23, 6))
 
 axd['Only Month'].plot(onlyMonths['Song Added At'], onlyMonths['count'])
 axd['Only Month'].set_title('Songs Added to Library by Month')
@@ -59,5 +79,23 @@ for ax in axd:
     axd[ax].grid(True, axis='y')
     for label in axd[ax].get_xticklabels():
         label.set_horizontalalignment('right')
+
+plt.show()
+plt.close()
+
+fig2, ax = plt.subplots(1, 3, figsize=(15, 10))
+ax[0].bar(unique['index'], unique['count'])
+ax[0].set_title('Unique Instances')
+ax[0].set_xlabel('Category')
+ax[0].set_ylabel('Occurrences')
+
+ax[1].pie(album['count'], labels=album['Album Type'], autopct='%1.1f%%', startangle=300)
+ax[1].set_title('Album Types')
+
+ax[2].bar(freq['Recency'], freq['count'])
+ax[2].tick_params(axis='x', labelrotation=45)
+ax[2].set_title('Timedelta Between Song Release and Library Addition')
+ax[2].set_xlabel('Timedelta')
+ax[2].set_ylabel('Number of Songs')
 
 plt.show()
